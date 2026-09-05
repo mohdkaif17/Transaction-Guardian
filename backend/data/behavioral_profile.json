@@ -1,0 +1,30 @@
+{
+  "total_transactions": 6,
+  "average_amount": 1295.12,
+  "std_amount": 2059.66,
+  "median_amount": 105.25,
+  "normal_amount_range": [
+    30.1,
+    3750.0
+  ],
+  "average_transactions_per_day": 2.0,
+  "common_hours": [
+    10,
+    14,
+    2
+  ],
+  "frequent_recipients": {
+    "Swiggy Food Order": 1,
+    "Uber Trip Delhi": 1,
+    "Amazon India": 1,
+    "Zomato Restaurant": 1,
+    "Netflix Subscription": 1
+  },
+  "common_categories": {
+    "Food": 2,
+    "Transport": 1,
+    "Shopping": 1,
+    "Entertainment": 1,
+    "Other": 1
+  }
+}

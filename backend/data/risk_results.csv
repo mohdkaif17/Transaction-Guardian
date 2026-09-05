@@ -1,0 +1,4 @@
+evaluation_id,transaction_id,risk_score,risk_level,flagged_rules,timestamp
+eval_001,tx_1001,0.05,LOW,,2026-09-01T10:15:31Z
+eval_002,tx_1002,0.02,LOW,,2026-09-01T14:22:11Z
+eval_003,tx_1003,0.85,HIGH,HIGH_AMOUNT|LOCATION_MISMATCH,2026-09-02T02:05:01Z

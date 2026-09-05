@@ -1,0 +1,13 @@
+{
+  "total_transactions": 0,
+  "average_amount": 0.0,
+  "median_amount": 0.0,
+  "normal_amount_range": [
+    0.0,
+    0.0
+  ],
+  "average_transactions_per_day": 0.0,
+  "common_hours": [],
+  "frequent_recipients": {},
+  "common_categories": {}
+}
