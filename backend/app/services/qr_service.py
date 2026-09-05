@@ -14,8 +14,8 @@ except Exception:
 
 def decode_qr(image_bytes: bytes) -> str:
     """
-    Reads an image from bytes using OpenCV, decodes any QR code found using pyzbar
-    (with OpenCV QRCodeDetector fallback), and returns the raw decoded string.
+    Reads an image from bytes using OpenCV, decodes any QR code found using multi-scale
+    pyzbar, OpenCV QRCodeDetector & Thresholding pipeline, returning the raw decoded string.
     Raises ValueError if no QR code is found or if the image is invalid.
     """
     if not image_bytes:
@@ -27,43 +27,61 @@ def decode_qr(image_bytes: bytes) -> str:
     if img is None:
         raise ValueError("Invalid image file: unable to decode image with OpenCV")
 
-    # Primary decode attempt using pyzbar (if available on system)
-    if HAS_PYZBAR and pyzbar is not None:
-        try:
-            decoded_objs = pyzbar.decode(img)
-            if decoded_objs:
-                for obj in decoded_objs:
-                    if obj.type == 'QRCODE' or obj.data:
-                        raw_data = obj.data.decode("utf-8")
-                        if raw_data:
-                            return raw_data
-        except Exception:
-            pass
-
-    # Secondary decode fallback using OpenCV QRCodeDetector
     detector = cv2.QRCodeDetector()
-    val, pts, _ = detector.detectAndDecode(img)
-    if val:
-        return val
 
-    # Convert to grayscale & try again for low-contrast QRs
+    # Pre-generate image variations (Original, Resized, Grayscale, Thresholded)
+    images_to_try = [img]
+
+    # Scale high-resolution images down to ~1024px for faster, more accurate matrix detection
+    h, w = img.shape[:2]
+    if max(h, w) > 1024:
+        scale = 1024.0 / max(h, w)
+        resized = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        images_to_try.append(resized)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    images_to_try.append(gray)
+
+    # Otsu Binarization for low-contrast/glare QR codes
+    try:
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        images_to_try.append(thresh)
+    except Exception:
+        pass
+
+    # 1. Primary decode attempt using pyzbar (if available on system)
     if HAS_PYZBAR and pyzbar is not None:
+        for target_img in images_to_try:
+            try:
+                decoded_objs = pyzbar.decode(target_img)
+                if decoded_objs:
+                    for obj in decoded_objs:
+                        if obj.data:
+                            raw_data = obj.data.decode("utf-8").strip()
+                            if raw_data:
+                                return raw_data
+            except Exception:
+                pass
+
+    # 2. Secondary decode fallback using OpenCV QRCodeDetector (Single & Multi-QR)
+    for target_img in images_to_try:
         try:
-            decoded_objs_gray = pyzbar.decode(gray)
-            if decoded_objs_gray:
-                for obj in decoded_objs_gray:
-                    raw_data = obj.data.decode("utf-8")
-                    if raw_data:
-                        return raw_data
+            val, pts, _ = detector.detectAndDecode(target_img)
+            if val and val.strip():
+                return val.strip()
         except Exception:
             pass
 
-    val_gray, _, _ = detector.detectAndDecode(gray)
-    if val_gray:
-        return val_gray
+        try:
+            ok, decoded_info, _, _ = detector.detectAndDecodeMulti(target_img)
+            if ok and decoded_info:
+                for info in decoded_info:
+                    if info and info.strip():
+                        return info.strip()
+        except Exception:
+            pass
 
-    raise ValueError("No QR code found in the image")
+    raise ValueError("No QR code detected in the image. Please upload a clear image of a UPI QR code.")
 
 
 def parse_upi_payload(raw_string: str) -> Dict[str, Any]:
@@ -101,7 +119,12 @@ def parse_upi_payload(raw_string: str) -> Dict[str, Any]:
         }
 
     try:
-        parsed_url = urllib.parse.urlparse(raw_cleaned)
+        # Standardize URL structure for urlparse if upi://pay? or upi://pay/?
+        url_str = raw_cleaned
+        if url_str.lower().startswith("upi://pay/?"):
+            url_str = url_str.replace("upi://pay/?", "upi://pay?", 1)
+
+        parsed_url = urllib.parse.urlparse(url_str)
         query_params = urllib.parse.parse_qs(parsed_url.query)
 
         pa_list = query_params.get("pa", [])

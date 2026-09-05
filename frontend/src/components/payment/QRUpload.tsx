@@ -171,9 +171,33 @@ export const QRUpload: React.FC<QRUploadProps> = ({
             {isProcessing ? 'Decoding QR Payload...' : 'Upload QR Image'}
           </Button>
 
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-4 font-mono">
-            Supported format: PNG, JPG, JPEG
-          </p>
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800/80 w-full max-w-md">
+            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono mb-2">
+              Or test with sample QR payloads:
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  processFile(new File(["upi://pay?pa=swiggy@icici&pn=Swiggy%20Foods&am=450.00&cu=INR"], "Swiggy_QR.png", { type: "image/png" }));
+                }}
+                className="text-[11px] px-2.5 py-1 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 border border-slate-300 dark:border-slate-700 transition-colors font-mono"
+              >
+                🍜 Swiggy Merchant QR
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  processFile(new File(["upi://pay?pa=unknown_crypto@okaxis&pn=Crypto%20Exchange&am=85000.00&cu=INR"], "Crypto_QR.png", { type: "image/png" }));
+                }}
+                className="text-[11px] px-2.5 py-1 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-300 dark:border-slate-700 transition-colors font-mono"
+              >
+                ⚠️ High Risk Merchant QR
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         /* DETECTED QR PAYMENT DETAILS BANNER */
