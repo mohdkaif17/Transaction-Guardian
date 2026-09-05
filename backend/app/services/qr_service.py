@@ -1,8 +1,15 @@
 import urllib.parse
 import cv2
 import numpy as np
-from pyzbar import pyzbar
 from typing import Dict, Any, Optional
+
+# Try importing pyzbar optionally so missing system C-library (libzbar) doesn't crash app startup
+try:
+    from pyzbar import pyzbar
+    HAS_PYZBAR = True
+except Exception:
+    pyzbar = None
+    HAS_PYZBAR = False
 
 
 def decode_qr(image_bytes: bytes) -> str:
@@ -20,18 +27,18 @@ def decode_qr(image_bytes: bytes) -> str:
     if img is None:
         raise ValueError("Invalid image file: unable to decode image with OpenCV")
 
-    # Primary decode attempt using pyzbar
-    try:
-        decoded_objs = pyzbar.decode(img)
-        if decoded_objs:
-            for obj in decoded_objs:
-                if obj.type == 'QRCODE' or obj.data:
-                    raw_data = obj.data.decode("utf-8")
-                    if raw_data:
-                        return raw_data
-    except Exception:
-        # Fallback to OpenCV QRCodeDetector if pyzbar fails or lacks DLLs
-        pass
+    # Primary decode attempt using pyzbar (if available on system)
+    if HAS_PYZBAR and pyzbar is not None:
+        try:
+            decoded_objs = pyzbar.decode(img)
+            if decoded_objs:
+                for obj in decoded_objs:
+                    if obj.type == 'QRCODE' or obj.data:
+                        raw_data = obj.data.decode("utf-8")
+                        if raw_data:
+                            return raw_data
+        except Exception:
+            pass
 
     # Secondary decode fallback using OpenCV QRCodeDetector
     detector = cv2.QRCodeDetector()
@@ -39,17 +46,18 @@ def decode_qr(image_bytes: bytes) -> str:
     if val:
         return val
 
-    # Convert to grayscale & try again with pyzbar/OpenCV for low-contrast QRs
+    # Convert to grayscale & try again for low-contrast QRs
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    try:
-        decoded_objs_gray = pyzbar.decode(gray)
-        if decoded_objs_gray:
-            for obj in decoded_objs_gray:
-                raw_data = obj.data.decode("utf-8")
-                if raw_data:
-                    return raw_data
-    except Exception:
-        pass
+    if HAS_PYZBAR and pyzbar is not None:
+        try:
+            decoded_objs_gray = pyzbar.decode(gray)
+            if decoded_objs_gray:
+                for obj in decoded_objs_gray:
+                    raw_data = obj.data.decode("utf-8")
+                    if raw_data:
+                        return raw_data
+        except Exception:
+            pass
 
     val_gray, _, _ = detector.detectAndDecode(gray)
     if val_gray:
