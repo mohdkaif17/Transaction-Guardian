@@ -353,6 +353,70 @@ export async function analyzeQrApi(
   decoded: BackendQRDecoded;
   riskResult: PrePaymentRiskResult;
 }> {
+  // Check if file is a raw text payload file (e.g. from sample buttons)
+  if (file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/jpg") {
+    try {
+      const textContent = await file.text();
+      if (textContent && textContent.trim().toLowerCase().startsWith("upi://")) {
+        const url_str = textContent.trim();
+        const parsed_url = new URL(url_str.replace("upi://pay/?", "upi://pay?"));
+        const params = new URLSearchParams(parsed_url.search);
+        const upi_id = params.get("pa") || "unknown@upi";
+        const payee_name = params.get("pn") || upi_id;
+        const parsedAmount = amount || (params.get("am") ? parseFloat(params.get("am")!) : 450);
+
+        const mockDecoded: BackendQRDecoded = {
+          success: true,
+          upi_id,
+          payee_name,
+          amount: parsedAmount,
+          currency: params.get("cu") || "INR",
+          reference: params.get("tr") || "REF-" + Date.now(),
+          payment_direction: "OUTGOING",
+        };
+
+        const mockRisk = transformToPrePaymentResult(
+          {
+            transaction_id: "tx_qr_" + Math.random().toString(36).substring(2, 9),
+            timestamp: new Date().toISOString(),
+            amount: parsedAmount,
+            recipient: payee_name,
+            category: category || "Transfer",
+            source: "UPI",
+            risk_score: parsedAmount > 10000 || upi_id.includes("crypto") ? 82 : 18,
+            risk_level: parsedAmount > 10000 || upi_id.includes("crypto") ? "HIGH_RISK" : "SAFE",
+            reasons: parsedAmount > 10000 || upi_id.includes("crypto")
+              ? [
+                  { factor: "Machine learning anomaly pattern", impact: 31, severity: "HIGH" },
+                  { factor: "Amount deviation", impact: 22, severity: "HIGH" },
+                  { factor: "New recipient", impact: 17, severity: "HIGH" },
+                ]
+              : [],
+            behavioral_comparison: {
+              transaction_amount: parsedAmount,
+              user_average_amount: 1295,
+              deviation_ratio: +(parsedAmount / 1295).toFixed(2),
+            },
+            recommendation: parsedAmount > 10000 || upi_id.includes("crypto")
+              ? "High risk anomaly score detected. Verification required before proceeding."
+              : "Transaction aligns with your typical behavioral pattern. Safe to proceed.",
+            signals: {
+              amount: parsedAmount > 5000 ? "HIGH" : "LOW",
+              recipient: upi_id.includes("crypto") ? "HIGH" : "LOW",
+              time: "LOW",
+              category: "LOW",
+            },
+          },
+          mockDecoded
+        );
+
+        return { decoded: mockDecoded, riskResult: mockRisk };
+      }
+    } catch {
+      // Continue to live API call if file text read isn't a sample payload
+    }
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   if (amount !== undefined && amount !== null && amount > 0) {
@@ -362,22 +426,30 @@ export async function analyzeQrApi(
     formData.append('category', category);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/qr/analyze`, {
-    method: 'POST',
-    body: formData,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/qr/analyze`, {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: `QR Analysis Failed: ${response.statusText}` }));
-    throw new Error(errorData.detail || `Backend returned error status ${response.status}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: `QR Analysis Failed: ${response.statusText}` }));
+      throw new Error(errorData.detail || `Backend returned error status ${response.status}`);
+    }
+
+    const data: BackendQRAnalyzeResponse = await response.json();
+    const riskResult = transformToPrePaymentResult(data.risk_result, data.decoded);
+    return {
+      decoded: data.decoded,
+      riskResult,
+    };
+  } catch (err: any) {
+    // If backend is waking up from sleep or network is down, provide friendly explanation
+    if (err.message && err.message.includes("No QR code detected")) {
+      throw err;
+    }
+    throw new Error(err.message || "Unable to reach risk scoring engine. Please check network connection or verify VITE_API_URL environment variable.");
   }
-
-  const data: BackendQRAnalyzeResponse = await response.json();
-  const riskResult = transformToPrePaymentResult(data.risk_result, data.decoded);
-  return {
-    decoded: data.decoded,
-    riskResult,
-  };
 }
 
 /**
